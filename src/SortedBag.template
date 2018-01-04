@@ -1,0 +1,319 @@
+/*
+ * SortedBag.cpp
+ *
+ *  Created on: Oct 20, 2017
+ *      Author: mener
+ */
+
+#include "SortedBag.h"
+#include "Node.h"
+#include <iostream>
+#include <cassert>
+
+//using namespace std;
+
+namespace dsanagu_5 { //implementation of SortedBag class
+// search key is student's ssid, sorted descending
+
+	template<class Item>
+	void SortedBag<Item>::copy_over(const SortedBag<Item>& sb) {
+	// precondition: m_size has been defined prior to calling this function
+	// postcondition: all of sb's nodes have been inserted into our bag
+	// Visit all of sb's nodes and insert them into the bag
+	// remember, you have direct access to the nodes
+
+		Node<Item>* o_cursor = sb.m_data; // part of functional begin(); points to sb's "head"
+
+		for(long iter = 0, other_size = sb.size(); !(o_cursor == sb.m_data && iter >= other_size); ++iter) {
+			insert(o_cursor->m_val);
+			o_cursor = o_cursor->m_next;
+		}
+	}
+
+	template<class Item>
+	SortedBag<Item>::SortedBag(const SortedBag<Item>& sb) { // copy constructor
+        m_size = 0;
+        m_asc = true;
+
+		copy_over(sb);
+		//assert(*this == sb); //problemo...
+	}
+
+	template<class Item>
+	void SortedBag<Item>::operator=(const SortedBag<Item>& sb) {
+		// check self assignment
+		if(this == &sb) return;
+
+		// delete old data to prevent memory leak
+		delete_all();
+
+		// copy over new data
+        m_size = 0;
+        m_asc = true;
+
+		copy_over(sb);
+		assert(*this == sb);
+	}
+
+	template<class Item>
+	SortedBag<Item>::~SortedBag() { delete_all(); }
+
+	template<class Item>
+	void SortedBag<Item>::delete_all() {
+		// postcondition: all nodes have been returned to the heap
+
+		if(m_data == 0 || m_size == 0) return; // case 0
+		
+		if(m_data->is_singleton()) { // case 1
+			delete m_data;
+			m_data = 0;
+			return;
+		}
+
+		for(begin(); !end(); this->operator++())
+			erase_one(get());
+		erase_one(get());
+		
+		//std::cout << "(Destructor) Size: " << m_size << std::endl;
+		assert(size() == 0);
+	}
+
+	// modifying member functions
+	// this member function handles dynamic memory
+	template<class Item>
+	bool SortedBag<Item>::erase_one(const Item& target) {
+
+		if(m_data == 0 || m_size == 0) return false; // guard for empty list
+		
+		begin();
+
+		while(!end()) {
+			Node<Item>* cursor = m_curr;
+		
+			if(cursor->m_val == target) { // if head deleted, replace it!!
+			
+				if(!cursor->is_singleton()) {
+                    // isolate the node to be deleted
+                    Node<Item>* behind = cursor->m_prev;
+                    Node<Item>* front = cursor->m_next;
+
+					// replacing the head
+                    if(cursor == m_data) m_data = front;
+
+                    behind->m_next = front;
+                    front->m_prev = behind;
+                    
+                    delete cursor;
+				
+					--m_size;
+					return true;
+				}
+				
+				// case: erasing last element
+				if(m_data->is_singleton()) {
+					delete m_data;
+					m_data = 0;
+					
+					--m_size;
+					assert(m_size == 0);
+					return true;
+				}
+
+			}
+
+			this->operator++();
+		}
+
+		return false; // only if last element wasn't equal
+	}
+
+	template<class Item>
+	long SortedBag<Item>::erase(const Item& target) { // all
+		long counter = 0; // how many instances of target deleted
+
+		if(m_data == 0 || m_size == 0) return counter; // guard for empty list
+
+		while(erase_one(target)) ++counter;
+
+		return counter;
+	}
+
+	template<class Item>
+	void SortedBag<Item>::insert(const Item& element)
+	// postcondition: when item inserted, bag is still sorted
+	// may need to address some special cases
+	// case 1: there are no elements
+	// case 2: there's only one element
+	// general case: there are n elements
+	{
+		Node<Item>* new_item = new Node<Item>(element);
+        ++m_size;
+
+		// case: no elements; insert at head
+		if(m_data == 0 || m_size == 0) {
+			m_data = new_item;
+
+			m_data->m_prev = m_data;
+			m_data->m_next = m_data;
+
+			return;
+		}
+
+		//begin();
+		m_curr = m_data;
+		long iter = 0;
+
+		while(!(m_curr == m_data && iter>= m_size)) {
+			// get element of current node
+			const Item current_val = m_curr->m_val;
+
+			// case: only one element; might consolidate this with general case
+			if(m_data->is_singleton()) {
+				// link nodes together. Both m_next and m_prev should point to the other node
+				// If head is greater, it remains the head. If it is less, element becomes new head.
+
+				m_data->m_next = new_item;
+				m_data->m_prev = new_item;
+
+				new_item->m_next = m_data;
+				new_item->m_prev = m_data;
+
+				if(element < current_val) m_data = new_item;
+
+				return;
+			}
+
+			// general case: multiple elements -------------------------------------------
+
+			// sorted ascending, will insert node where it is less than current node
+			if(element < current_val) {
+
+				Node<Item>* behind = m_curr->m_prev; // element behind m_curr, should be greater than element
+
+				// insert node in between
+				new_item->m_next = m_curr;
+				new_item->m_prev = behind;
+
+				// have current node and behind node point to them
+				behind->m_next = new_item;
+				m_curr->m_prev = new_item;
+
+				// in case greater than the top element
+				if(m_curr == m_data) m_data = new_item;
+
+				return; // this will prevent iterator from going all the way to the end if there is match
+			}
+
+			// need to relink to the beginning if reached the end; may cause segmentation fault?
+			if(m_curr->m_next == m_data) {
+                new_item->m_prev = m_curr; // curr will be pointing to last now
+                new_item->m_next = m_data;
+
+                m_curr->m_next = new_item;
+                m_data->m_prev = new_item;
+
+                return;
+			}
+
+			//this->operator++();
+			++iter;
+			m_curr = m_curr->m_next;			
+		}
+	} // end of insert()
+
+	template<class Item>
+	void SortedBag<Item>::operator +=(const SortedBag<Item>& sb) {
+		// insert will auto increment m_size and keep it autosorted
+
+		copy_over(sb);
+	}
+
+	// SIMPLE ITERATOR
+	template<class Item>
+	void SortedBag<Item>::begin(const bool ascending) { // default true
+		m_asc = ascending;
+		iter_position = 0;
+
+		m_curr = m_data; // m_data is first element
+	}
+
+	template<class Item>
+	bool SortedBag<Item>::end() const { // on last element
+		if(m_data == 0) return true;
+
+		// end if pointing to beginning and has traversed the entire ring once
+		return m_curr == m_data && iter_position >= m_size;
+	}
+
+	template<class Item>
+	void SortedBag<Item>::operator++() {
+		if(m_curr != NULL) {
+			m_curr = m_curr->m_next;
+	
+			++iter_position;
+		}
+	}
+
+	template<class Item>
+	void SortedBag<Item>::operator--() {
+		if(m_curr != NULL) {
+			m_curr = m_curr->m_prev;
+	
+			++iter_position;
+		}
+	}
+
+	template<class Item>
+	Item& SortedBag<Item>::get() { return m_curr->m_val; }
+
+/*	template<class Item>
+	std::ostream& operator<<(std::ostream& o, const SortedBag<Item>& sb) {
+		Node<Item>* cursor = sb.m_data;
+
+		for(long iter = 0, sbsize = sb.size(); cursor != sb.m_data && iter < sbsize; ++iter) {
+			o << cursor->m_val;
+			cursor = cursor->m_next;
+		}
+
+		return o;
+	}*/
+
+	template<class Item>
+	bool SortedBag<Item>::operator==(const SortedBag<Item>& rhsor) {
+	// ensure same size
+	// Will iterate through bag and other bag at the same time
+	// both bags should be automatically sorted.
+	// if you find one node that is unequal, then the bags are unequal
+
+		if(size() != rhsor.size()) {
+			std::cout << "operator==() debug output: uneven size (" << size() << " vs. " << rhsor.size() << ")\n";
+			return false ;
+		}
+
+
+		begin();
+		Node<Item>* outcursor = rhsor.m_data; //rhs.begin
+
+		for(long iter = 0, rsize = rhsor.size(); outcursor != rhsor.m_data && iter < rsize; ++iter) {
+			Item left = get();
+			Item right = outcursor->m_val;
+
+			if(left != right) return false;
+
+			outcursor = outcursor->m_next;
+		}
+
+		return true;
+	}
+
+	// nonmember function
+	template<class T>
+	SortedBag<T> operator+(const SortedBag<T>& sb1, const SortedBag<T>& sb2) {
+		SortedBag<T> fullbag(sb1);
+		fullbag += sb2;
+
+		return fullbag;
+	}
+
+}
+
